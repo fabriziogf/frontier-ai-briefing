@@ -54,6 +54,11 @@ audio:
   bitrate: 128k
   tts_provider: openai       # DECISION: openai | elevenlabs | kokoro (local)
   voice: ""
+  delivery: save_to_spotify  # save_to_spotify | rss (fallback feed) | both
+  save_to_spotify:
+    cli_version: 0.2.0       # beta: pin it, bump deliberately
+    show_title: Frontier AI Briefing   # looked up by title; the show ID stays out of the repo
+    status_timeout: 5m
 
 feedback:
   affinity_window_days: 60

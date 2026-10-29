@@ -12,7 +12,7 @@ The full design is in [frontier-ai-briefing-spec.md](frontier-ai-briefing-spec.m
 2. **Dedup** coverage of the same event into one cluster.
 3. **Rank** each cluster against a relevance profile with a small model, then blend in significance, source tier, and my feedback.
 4. **Explain** the papers that clear the bar in three tiers: PM takeaway, intuition, technical core. A concept map tracks what I already know, so explanations build on it.
-5. **Deliver** a daily digest, a weekly written briefing, and a weekly 15 to 20 minute audio episode on a private podcast feed.
+5. **Deliver** a daily digest, a weekly written briefing, and a weekly 15 to 20 minute audio episode. The episode lands in my Spotify library as a private Personal Podcast via [Save to Spotify](https://github.com/spotify/save-to-spotify), with a private RSS feed as fallback.
 6. **Measure** relevance and explanation quality with evals. Feedback links feed back into ranking.
 
 ## Status
@@ -25,7 +25,7 @@ Scaffolding only. Nothing runs end to end yet.
 | M2 | Relevance eval and tuning, email | |
 | M3 | Paper explainer and concept map | |
 | M4 | Weekly briefing and feedback loop | |
-| M5 | Audio episode and private feed | |
+| M5 | Audio episode and Spotify delivery | |
 | M6 | Hardening | |
 
 ## Setup
@@ -55,4 +55,4 @@ tests/           pytest
 
 ## Privacy
 
-This repo is public. The relevance profile describes public themes only. The database, generated output, and podcast feed token never get committed; they are in `.gitignore`, and secrets live in `.env` locally and in repository secrets in CI.
+This repo is public. The relevance profile describes public themes only. The database, generated output, Save to Spotify credentials, and podcast feed token never get committed; they are in `.gitignore`, and secrets live in `.env` locally and in repository secrets in CI.

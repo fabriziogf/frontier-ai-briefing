@@ -38,7 +38,7 @@ This document is the full spec. A coding agent should be able to build the syste
         ▼                          ▼                               ▼
  ┌─────────────┐          ┌────────────────┐             ┌────────────────┐
  │ Daily digest│          │ Weekly briefing│────────────▶│ Audio episode  │
- │  (email/md) │          │  (markdown/web)│  script gen │ (TTS + RSS)    │
+ │  (email/md) │          │  (markdown/web)│  script gen │ (TTS + Spotify)│
  └─────────────┘          └────────────────┘             └────────────────┘
         │                          │                               │
         └──────────────┬───────────┴───────────────────────────────┘
@@ -52,7 +52,7 @@ This document is the full spec. A coding agent should be able to build the syste
 Three components, one shared data layer:
 - **Component A: Briefing backbone** (ingestion, dedup, relevance, digests)
 - **Component B: Layered paper explainer** (three-tier explanations + concept map)
-- **Component C: Audio briefing** (script generation, TTS, private podcast feed)
+- **Component C: Audio briefing** (script generation, TTS, delivery to the owner's Spotify library)
 
 ---
 
@@ -69,7 +69,8 @@ Three components, one shared data layer:
 | PDF parsing | `pymupdf` | Fallback to arXiv HTML (ar5iv) when available; it parses more cleanly. |
 | TTS | **DECISION**: default OpenAI TTS or ElevenLabs via API; local fallback Kokoro | Abstract behind a `TTSProvider` interface. |
 | Audio post | `pydub` + `ffmpeg` | Concatenate segments, normalize loudness to -16 LUFS. |
-| Web/feed hosting | Static site (GitHub Pages or Cloudflare Pages) for briefing archive; podcast RSS hosted at an unguessable URL | Private feed: random path token, no index. |
+| Audio delivery | Save to Spotify CLI ([`spotify/save-to-spotify`](https://github.com/spotify/save-to-spotify), Apache-2.0, beta) | Uploads each episode to the owner's library as a private Personal Podcast, with chapters. See §7.3. |
+| Web/feed hosting | Static site (GitHub Pages or Cloudflare Pages) for briefing archive; fallback podcast RSS hosted at an unguessable URL | Fallback feed only: random path token, no index. |
 | Email | **DECISION**: Resend or SMTP | For the daily digest. Optional in v1 (markdown file is acceptable). |
 | Scheduling | GitHub Actions cron (default) or a small VPS with cron | Actions is simplest; DB stored as an artifact or in a private repo/branch, or move DB to a hosted SQLite (Turso) if Actions. |
 | Config | `pydantic-settings` + YAML files | |
@@ -212,6 +213,8 @@ Seed list. The agent should verify each URL resolves and has a working feed befo
 | 1 | Hugging Face blog | rss |
 | 1 | arXiv cs.CL, cs.IR, cs.AI, cs.LG (filtered, see below) | arxiv API |
 | 1 | Hugging Face Daily Papers | hf_papers |
+| 1 | Spotify Research | rss |
+| 2 | Spotify Engineering | rss |
 | 2 | Simon Willison's weblog | rss |
 | 2 | Interconnects (Nathan Lambert) | rss |
 | 2 | Latent Space | rss |
@@ -431,10 +434,22 @@ outline → draft_script → spoken_language_pass → length_check → final_scr
 - `TTSProvider` interface: `synthesize(text: str, voice: str) -> bytes`. Implement at least one API provider and stub a local one.
 - Chunk long segments at sentence boundaries to respect provider limits.
 - Assemble with `pydub`: short silence between segments (600 ms), optional intro/outro sting (royalty-free or self-generated only), loudness normalize to -16 LUFS, export MP3 128 kbps mono.
-- Emit chapter markers (ID3 CHAP) from segment boundaries.
+- Emit chapter markers from segment boundaries: as a Save to Spotify timeline (§7.3) and as ID3 CHAP tags in the MP3, so the fallback feed has them too.
 
-### 7.3 Private podcast feed
+### 7.3 Delivery
 
+The owner listens in Spotify. The Spotify app does not subscribe to arbitrary private RSS URLs, so the primary path is the Save to Spotify CLI, which saves audio to the owner's own library as a private Personal Podcast. Episodes are not searchable by other listeners and never enter the public catalog. The CLI only uploads; TTS and assembly (§7.2) stay as specced.
+
+**Primary: Save to Spotify** (`audio.delivery: save_to_spotify`)
+- Call the CLI from Python via `subprocess` with `--json`. Pin the CLI version in config; it is beta.
+- One show for all episodes, found by title (`shows --json`) and created once if missing. Keep the show ID out of the repo.
+- Per episode: `upload <mp3> --title "<week title>" --summary "<show notes>" --show-id <id> --image <cover>`, then `episodes status <id> --wait` until processing finishes.
+- Then `timeline set --episode-id <id> --from-file timeline.json`: one `chapter` per segment (at least 2, first at 0 ms), plus a `link` to each segment's main source. Links need a positive `duration_ms` and must not overlap.
+- Show notes = the week-in-one-paragraph summary plus the top item titles. The full briefing with links stays on the static site.
+- **Auth:** the owner runs `save-to-spotify auth login` once locally. `token.json` and `dpop_key.json` go into CI secrets as base64 and are restored before each run; the CLI refreshes the access token itself. Run `auth status` as a pre-flight check. Do not use `SAVE_TO_SPOTIFY_AUTH_TOKEN` for scheduled runs; that token expires in about an hour.
+- **Failure:** if `auth status` fails or the upload errors, publish to the fallback feed (if enabled) and send the failure notice (§11).
+
+**Fallback: private RSS feed** (`audio.delivery: rss` or `both`)
 - Generate a valid podcast RSS 2.0 feed with iTunes namespace tags.
 - Host MP3s and `feed.xml` under a random path token, e.g. `/pod/<32-char-token>/feed.xml`. No links to it from the public site; `noindex`.
 - Owner subscribes by URL in any podcast app that supports private RSS feeds.
@@ -472,7 +487,7 @@ Build evals before tuning. Store in `evals/`.
 - Style checks (deterministic): no em dashes, length bands respected, no banned hype words.
 
 ### 9.3 Audio eval
-- Deterministic: duration within 14 to 21 minutes, no URLs or markdown symbols in script, loudness within ±1 LU of target.
+- Deterministic: duration within 14 to 21 minutes, no URLs or markdown symbols in script, loudness within ±1 LU of target, generated `timeline.json` passes the Save to Spotify timeline rules.
 - Judge pass on script for spoken naturalness and factual consistency with the written briefing.
 
 ### 9.4 Dedup eval
@@ -517,7 +532,8 @@ frontier-briefing/
 │   │   ├── script_graph.py
 │   │   ├── tts.py
 │   │   ├── assemble.py
-│   │   └── feed.py
+│   │   ├── publish.py        # Save to Spotify upload + timeline
+│   │   └── feed.py           # fallback private RSS feed
 │   ├── feedback.py
 │   ├── site/                 # static site generator (Jinja2 templates)
 │   └── prompts/              # one .md file per prompt, versioned
@@ -542,7 +558,7 @@ Prompts are files, not inline strings, and each has a version header so eval res
 ## 11. Operations
 
 - **Schedule:** daily run 6:30 America/New_York (digest ready by 7:00). Weekly run Saturday 6:00.
-- **Secrets:** `ANTHROPIC_API_KEY`, TTS provider key, email provider key, feedback HMAC secret, hosting tokens. Stored as CI secrets. Never logged.
+- **Secrets:** `ANTHROPIC_API_KEY`, TTS provider key, email provider key, feedback HMAC secret, hosting tokens, Save to Spotify credentials (`STS_TOKEN_B64`, `STS_DPOP_KEY_B64`), and the podcast path token if the fallback feed is on. Stored as CI secrets. Never logged.
 - **Cost guardrails:** log tokens and cost per stage in `runs`. Hard daily budget in config (default $3/day, $10/weekly run). If exceeded, skip enrichment and audio, still send the digest, and note it in the digest footer.
 - **Expected cost (rough):** ranking ~50 to 100 clusters/day with a small model, 1 to 3 paper explanations/day, 1 weekly synthesis and script, ~20 min TTS/week. Should land in the low tens of dollars per month. Verify against real usage in the first two weeks.
 - **Failure handling:** each stage is idempotent and resumable by `status`. A failed source never blocks the run. Send a short failure notice if a scheduled run errors.
@@ -572,8 +588,8 @@ Each milestone ends with something usable. Do not start the next until the accep
 - **Accept:** feedback links work end to end; a down-voted theme measurably shifts the following week's ranking in a test.
 
 ### M5: Audio (week 6)
-- Script graph, TTS, assembly, private RSS feed.
-- **Accept:** episode plays in a standard podcast app via private feed; duration and loudness within spec; chapters visible.
+- Script graph, TTS, assembly, Save to Spotify delivery. Fallback RSS feed optional.
+- **Accept:** a scheduled run puts the episode in the owner's Spotify library with no manual step; duration and loudness within spec; chapters visible in the Spotify player.
 
 ### M6: Hardening (ongoing)
 - Cost guardrails, failure notices, backups, monthly theme-weight proposal report.
@@ -584,7 +600,7 @@ Each milestone ends with something usable. Do not start the next until the accep
 
 1. Embedding model: local (free, slightly lower quality) vs. API.
 2. TTS provider and voice. Generate a 60-second sample from two or three options before committing.
-3. Hosting for site, feed, and feedback endpoint (default: Cloudflare Pages + Worker).
+3. Hosting for site and feedback endpoint, plus the feed if the fallback is on (default: Cloudflare Pages + Worker).
 4. Daily digest channel: email, markdown in a repo, or both.
 5. Whether to add a second "co-host" voice later (adds conversational texture, roughly doubles TTS complexity).
 

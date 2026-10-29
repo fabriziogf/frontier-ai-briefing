@@ -1,6 +1,6 @@
 name: weekly
 
-# weekly briefing -> audio -> publish (spec section 11)
+# weekly briefing -> audio -> Save to Spotify (spec sections 7.3, 11)
 # Manual only until M4/M5 land. Then enable the cron (Saturday 10:00 UTC, about 6:00 New York).
 on:
   workflow_dispatch:
@@ -19,6 +19,21 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --locked
+      - name: Install save-to-spotify (version pinned in config/settings.yaml)
+        run: |
+          v=$(uv run python -c "import yaml; print(yaml.safe_load(open('config/settings.yaml'))['audio']['save_to_spotify']['cli_version'])")
+          curl -fsSL https://saveto.spotify.com/install.sh | bash -s -- --version "$v" --dir "$HOME/.local/bin" --no-skills
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Restore Save to Spotify credentials
+        env:
+          STS_TOKEN_B64: ${{ secrets.STS_TOKEN_B64 }}
+          STS_DPOP_KEY_B64: ${{ secrets.STS_DPOP_KEY_B64 }}
+        run: |
+          mkdir -p ~/.config/save-to-spotify
+          printf '%s' "$STS_TOKEN_B64" | base64 -d > ~/.config/save-to-spotify/token.json
+          printf '%s' "$STS_DPOP_KEY_B64" | base64 -d > ~/.config/save-to-spotify/dpop_key.json
+          chmod 600 ~/.config/save-to-spotify/*.json
       # TODO(M4): restore the DB from private storage before, and save it after.
       - run: uv run briefing weekly
+      # Runs `save-to-spotify auth status` first and falls back to the RSS feed on failure (spec 7.3).
       - run: uv run briefing audio

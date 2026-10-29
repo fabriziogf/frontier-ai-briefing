@@ -60,8 +60,20 @@ sources:
     url: https://huggingface.co/api/daily_papers
     tier: 1
     enabled: false
+  - id: spotify_research
+    name: Spotify Research
+    kind: rss
+    url: https://research.atspotify.com/feed/
+    tier: 1
+    enabled: false
 
   # Tier 2
+  - id: spotify_engineering
+    name: Spotify Engineering
+    kind: rss
+    url: https://engineering.atspotify.com/feed/
+    tier: 2
+    enabled: false
   - id: simon_willison
     name: Simon Willison's weblog
     kind: rss

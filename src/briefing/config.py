@@ -6,13 +6,14 @@ from typing import Any
 import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
+ROOT = Path(__file__).resolve().parents[2]
+CONFIG_DIR = ROOT / "config"
 
 
 class Secrets(BaseSettings):
     """Secrets come from the environment or .env. Never logged."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
     anthropic_api_key: str = ""
     tts_api_key: str = ""

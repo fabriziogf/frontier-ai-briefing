@@ -17,11 +17,11 @@ The full design is in [frontier-ai-briefing-spec.md](frontier-ai-briefing-spec.m
 
 ## Status
 
-Scaffolding only. Nothing runs end to end yet.
+M1 is built: ingestion from 20 sources, dedup, ranking, and a daily markdown digest. It still has to pass its acceptance test, 7 straight daily runs.
 
 | Milestone | Scope | Status |
 |---|---|---|
-| M1 | Ingestion, dedup, ranking, daily digest | Next |
+| M1 | Ingestion, dedup, ranking, daily digest | Built, 7-day run pending |
 | M2 | Relevance eval and tuning, email | |
 | M3 | Paper explainer and concept map | |
 | M4 | Weekly briefing and feedback loop | |
@@ -34,10 +34,12 @@ Needs [uv](https://docs.astral.sh/uv/). Python 3.12 is installed by uv if missin
 
 ```bash
 uv sync --extra embed
-cp .env.example .env
-uv run briefing init-db
+cp .env.example .env        # then set ANTHROPIC_API_KEY
 uv run pytest
+uv run briefing run-daily   # ingest -> rank -> output/daily/<date>.md
 ```
+
+The scheduled run is `.github/workflows/daily.yml`. It keeps the database and digests in a separate private repo, so nothing personal lands here.
 
 `--extra embed` pulls in `sentence-transformers` and PyTorch for local embeddings. Skip it if you only need the tests.
 

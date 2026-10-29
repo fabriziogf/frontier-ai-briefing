@@ -1,6 +1,6 @@
 # Seed sources (spec section 5.1).
-# URLs checked on 2026-10-28: each returned HTTP 200. That only means the URL is up.
-# Enable a source once its fetcher actually parses items from it.
+# URLs checked on 2026-10-28 (HTTP 200). Fetchers verified against live data on 2026-10-29;
+# a source is enabled only after its fetcher parsed real items from it.
 # tier: 1 = primary lab/official, 2 = strong secondary, 3 = aggregator
 
 sources:
@@ -9,63 +9,69 @@ sources:
     name: Anthropic news
     kind: html          # no official feed found
     url: https://www.anthropic.com/news
+    link_pattern: "^/news/(?!(announcements|features|partnerships|product|policy|safeguards|security)$)[a-z0-9-]+$"
+    item_type: news
     tier: 1
-    enabled: false
+    enabled: true
   - id: openai
     name: OpenAI blog
     kind: rss
     url: https://openai.com/news/rss.xml
+    item_type: news
     tier: 1
-    enabled: false
+    enabled: true
   - id: deepmind
     name: Google DeepMind blog
     kind: rss
     url: https://deepmind.google/blog/rss.xml
     tier: 1
-    enabled: false
+    enabled: true
   - id: google_research
     name: Google Research blog
     kind: rss
     url: https://research.google/blog/rss/
     tier: 1
-    enabled: false
+    enabled: true
   - id: meta_ai
     name: Meta AI blog
     kind: html
     url: https://ai.meta.com/blog/
+    link_pattern: "^/blog/[a-z0-9-]+/?$"
     tier: 1
-    enabled: false
+    enabled: true
   - id: mistral
     name: Mistral news
-    kind: html
-    url: https://mistral.ai/news
+    kind: rss           # listing page links to /news/rss
+    url: https://mistral.ai/news/rss
+    item_type: news
     tier: 1
-    enabled: false
+    enabled: true
   - id: hf_blog
     name: Hugging Face blog
     kind: rss
     url: https://huggingface.co/blog/feed.xml
     tier: 1
-    enabled: false
+    enabled: true
   - id: arxiv
     name: arXiv (cs.CL, cs.IR, cs.AI, cs.LG)
     kind: arxiv
-    url: http://export.arxiv.org/api/query
+    url: https://export.arxiv.org/api/query
     categories: [cs.CL, cs.IR, cs.AI, cs.LG]
+    lookback_days: 4    # papers reach the API a day or two after submission
     tier: 1
-    enabled: false
+    enabled: true      # robots.txt exemption: see ingest.robots_exempt_hosts in settings
   - id: hf_daily_papers
     name: Hugging Face Daily Papers
     kind: hf_papers
     url: https://huggingface.co/api/daily_papers
     tier: 1
-    enabled: false
+    enabled: true
   - id: spotify_research
     name: Spotify Research
     kind: rss
     url: https://research.atspotify.com/feed/
     tier: 1
-    enabled: false
+    enabled: true
 
   # Tier 2
   - id: spotify_engineering
@@ -73,63 +79,72 @@ sources:
     kind: rss
     url: https://engineering.atspotify.com/feed/
     tier: 2
-    enabled: false
+    enabled: true
   - id: simon_willison
     name: Simon Willison's weblog
     kind: rss
     url: https://simonwillison.net/atom/everything/
     tier: 2
-    enabled: false
+    enabled: true
   - id: interconnects
     name: Interconnects (Nathan Lambert)
     kind: rss
     url: https://www.interconnects.ai/feed
     tier: 2
-    enabled: false
+    enabled: true
   - id: latent_space
     name: Latent Space
     kind: rss
     url: https://www.latent.space/feed
     tier: 2
-    enabled: false
+    enabled: true
   - id: the_batch
     name: The Batch (DeepLearning.AI)
     kind: html          # /the-batch/feed/ returned 404; listing page is up
     url: https://www.deeplearning.ai/the-batch/
+    link_pattern: "^/the-batch/issue-[0-9]+/?$"
+    item_type: news
     tier: 2
-    enabled: false
+    enabled: true
   - id: import_ai
     name: Import AI (Jack Clark)
     kind: rss           # mirror: https://importai.substack.com/feed
     url: https://jack-clark.net/feed/
     tier: 2
-    enabled: false
+    enabled: true
   - id: lilian_weng
     name: Lilian Weng's blog
     kind: rss
     url: https://lilianweng.github.io/index.xml
     tier: 2
-    enabled: false
+    enabled: true
   - id: eugene_yan
     name: Eugene Yan
     kind: rss
     url: https://eugeneyan.com/rss/
     tier: 2
-    enabled: false
+    enabled: true
 
   # Tier 3
   - id: hacker_news
     name: Hacker News front page (AI-filtered)
     kind: hn
     url: https://hn.algolia.com/api/v1/search?tags=front_page
+    lookback_days: 1
     tier: 3
-    enabled: false
+    enabled: true
   - id: github_trending
     name: GitHub trending (Python, AI topics)
     kind: github
     url: https://github.com/trending/python
     tier: 3
-    enabled: false
+    enabled: true
+
+# Title/description keywords that mark an HN story or GitHub repo as AI-related.
+ai_keywords: [AI, LLM, LLMs, GPT, Claude, Gemini, Llama, Mistral, Qwen, DeepSeek, model, models,
+  agent, agents, agentic, RAG, embedding, embeddings, transformer, inference, MCP, OpenAI,
+  Anthropic, DeepMind, "machine learning", "neural", diffusion, chatbot, copilot, prompt,
+  fine-tuning, reasoning, multimodal, TTS, speech, retrieval, vector]
 
 # arXiv pre-filter: papers from these labs/authors always reach ranking.
 watched_authors: []

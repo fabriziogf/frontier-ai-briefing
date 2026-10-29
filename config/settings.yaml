@@ -3,6 +3,9 @@
 models:
   fast: claude-haiku-5-5      # classification, ranking, short notes
   strong: claude-sonnet-5-5   # paper explanations, weekly synthesis, audio script
+  prices_per_mtok:            # USD, first-party API list prices as of 2026-10
+    claude-haiku-5-5: {input: 0.10, output: 0.50}
+    claude-sonnet-5-5: {input: 2.00, output: 10.00}
 
 embeddings:
   model: BAAI/bge-small-en-v1.5
@@ -11,14 +14,24 @@ embeddings:
 storage:
   db_path: data/briefing.db
   output_dir: output
+  http_cache_path: data/http_cache.sqlite
   http_cache_ttl_hours: 6
 
 ingest:
   user_agent: "frontier-ai-briefing/0.1 (personal research feed reader)"
   raw_text_max_chars: 20000
+  lookback_days: 2           # per-source override: lookback_days in sources.yaml
+  min_request_interval_s: 1.0
+  host_intervals_s:
+    export.arxiv.org: 3.0    # arXiv API terms: one request every 3 seconds
+  # Documented APIs whose robots.txt blocks all agents. export.arxiv.org disallows "/" but is
+  # the host arXiv's API docs tell programs to use, so it is exempt; its rate limit still applies.
+  robots_exempt_hosts: [export.arxiv.org]
   arxiv:
-    theme_similarity_threshold: 0.45
-    max_papers_per_day: 40
+    # bge-small scores are compressed: on 929 papers (2026-10-25 to 10-29) max theme similarity
+    # had median 0.63, p90 0.68, p99 0.72. The spec's 0.45 kept all of them. Tune in M2.
+    theme_similarity_threshold: 0.65
+    max_papers_per_day: 40     # similarity-picked papers; papers on HF Daily Papers don't count
 
 clustering:
   window_days: 7
@@ -26,6 +39,9 @@ clustering:
   borderline_low: 0.75     # 0.75 to 0.85 goes to an LLM yes/no check
 
 ranking:
+  input_chars: 3000          # of item text sent to the ranker
+  max_tokens: 4000           # includes thinking
+  effort: medium
   weights:
     theme: 0.55
     significance: 0.30
@@ -39,6 +55,10 @@ ranking:
     min_items: 8
     max_items: 12
     max_per_theme: 4
+
+digest:
+  max_items: 15
+  max_age_days: 7            # skip items published longer ago than this
 
 explain:
   daily_cap: 3

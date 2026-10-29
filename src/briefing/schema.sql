@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS rankings (
   rationale       TEXT NOT NULL,             -- LLM's short justification
   why_it_matters  TEXT,                      -- 2-line note shown to owner
   ranked_at       TIMESTAMP NOT NULL,
-  model           TEXT NOT NULL
+  model           TEXT NOT NULL,
+  prompt_version  TEXT NOT NULL              -- e.g. "rank_cluster@1", ties scores to a prompt version
 );
 
 -- Layered paper explanations

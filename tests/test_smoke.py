@@ -6,8 +6,17 @@ from briefing.cli import app
 from briefing.config import load_yaml
 
 EXPECTED_TABLES = {
-    "items", "sources", "clusters", "item_embeddings", "rankings", "explanations",
-    "concepts", "feedback", "digests", "episodes", "runs",
+    "items",
+    "sources",
+    "clusters",
+    "item_embeddings",
+    "rankings",
+    "explanations",
+    "concepts",
+    "feedback",
+    "digests",
+    "episodes",
+    "runs",
 }
 
 

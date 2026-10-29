@@ -134,6 +134,12 @@ def track_run(conn: sqlite3.Connection, stage: str):
         conn.commit()
 
 
+def compact(conn: sqlite3.Connection) -> None:
+    """Reclaim space after deletes, so the DB committed to the data repo stays small."""
+    conn.commit()
+    conn.execute("VACUUM")
+
+
 def spend_since(conn: sqlite3.Connection, since_iso: str) -> float:
     row = conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0) AS c FROM runs WHERE started_at >= ?", (since_iso,)

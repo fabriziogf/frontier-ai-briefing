@@ -59,9 +59,13 @@ def prefilter_papers(
     max_papers: int,
 ) -> dict[str, int]:
     """Keep an arXiv paper if it is on HF Daily Papers, by a watched author/lab, or close to a
-    theme. Everything else is dropped before it costs an LLM call."""
+    theme. Everything else is dropped before it costs an LLM call.
+
+    Runs before embed_new and embeds papers in memory: only kept papers get stored vectors,
+    because sqlite-vec never frees the space of deleted vectors.
+    """
     rows = conn.execute(
-        """SELECT i.id, i.arxiv_id, i.author, i.raw_text FROM items i
+        """SELECT i.id, i.arxiv_id, i.author, i.title, i.raw_text FROM items i
            JOIN sources s ON s.id = i.source_id
            WHERE s.kind = 'arxiv' AND i.status = 'new' AND i.cluster_id IS NULL"""
     ).fetchall()
@@ -81,7 +85,8 @@ def prefilter_papers(
 
     themes = [f"{t['name']}: {t['description']}" for t in profile["themes"]]
     theme_vecs = embedder.encode(themes, query=True)
-    vecs = _vectors(conn, [r["id"] for r in rows])
+    paper_vecs = embedder.encode([item_text(r["title"], r["raw_text"]) for r in rows])
+    vecs = {r["id"]: v for r, v in zip(rows, paper_vecs, strict=True)}
 
     must, scored = [], []
     for r in rows:
@@ -100,6 +105,51 @@ def prefilter_papers(
     conn.executemany("UPDATE items SET status = 'dropped' WHERE id = ?", [(i,) for i in drop])
     conn.commit()
     return {"papers_in": len(rows), "kept": len(keep), "on_hf_or_watched": len(must)}
+
+
+def _rebuild_vectors(conn: sqlite3.Connection) -> None:
+    """Recreate the vec0 table so the space of deleted vectors is actually freed."""
+    ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'item_embeddings'").fetchone()[
+        "sql"
+    ]
+    rows = conn.execute("SELECT item_id, embedding FROM item_embeddings").fetchall()
+    conn.execute("DROP TABLE item_embeddings")
+    conn.execute(ddl)
+    conn.executemany(
+        "INSERT INTO item_embeddings (item_id, embedding) VALUES (?, ?)",
+        [(r["item_id"], r["embedding"]) for r in rows],
+    )
+
+
+def purge_dropped_papers(conn: sqlite3.Connection) -> int:
+    """Drop the text of pre-filtered arXiv papers, which never reach ranking.
+
+    The row stays: its URL is what keeps the paper from being fetched again. Vectors left over
+    from before prefilter_papers stopped storing them are removed, and the vector table rebuilt.
+    """
+    ids = [
+        r["id"]
+        for r in conn.execute(
+            """SELECT i.id FROM items i JOIN sources s ON s.id = i.source_id
+               WHERE s.kind = 'arxiv' AND i.status = 'dropped'
+                 AND (i.raw_text IS NOT NULL
+                      OR i.id IN (SELECT item_id FROM item_embeddings))"""
+        )
+    ]
+
+    def count() -> int:
+        return conn.execute("SELECT COUNT(*) FROM item_embeddings").fetchone()[0]
+
+    before = count()
+    for i in range(0, len(ids), 500):
+        chunk = ids[i : i + 500]
+        q = ",".join("?" * len(chunk))
+        conn.execute(f"DELETE FROM item_embeddings WHERE item_id IN ({q})", chunk)
+        conn.execute(f"UPDATE items SET raw_text = NULL WHERE id IN ({q})", chunk)
+    if count() < before:
+        _rebuild_vectors(conn)
+    conn.commit()
+    return len(ids)
 
 
 def _refresh_canonical(conn: sqlite3.Connection, cluster_id: str) -> None:

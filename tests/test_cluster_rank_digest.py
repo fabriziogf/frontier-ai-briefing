@@ -228,3 +228,33 @@ def test_borderline_pairs_go_to_same_event_check(world):
     ids = dict(world.execute("SELECT id, cluster_id FROM items").fetchall())
     assert asked == [("Gemini leaderboard", "Gemini launch")]
     assert ids[first] == ids[second] and out["llm_checks"] == 1
+
+
+def test_prefilter_stores_no_vectors_for_dropped_papers(world, profile):
+    emb = FakeEmbedder(AXES | {"biology": 6})
+    kept = add(world, "arxiv", "Dense retrieval", "retrieval", arxiv_id="2", item_type="paper")
+    dropped = add(world, "arxiv", "Protein folding", "biology", arxiv_id="3", item_type="paper")
+    cluster.prefilter_papers(world, emb, profile, {}, threshold=0.45, max_papers=40)
+    cluster.purge_dropped_papers(world)
+    cluster.embed_new(world, emb)
+    stored = {r[0] for r in world.execute("SELECT item_id FROM item_embeddings")}
+    assert stored == {kept}
+    text = world.execute("SELECT raw_text FROM items WHERE id = ?", (dropped,)).fetchone()[0]
+    assert text is None
+
+
+def test_purge_removes_legacy_vectors_and_rebuilds_table(world):
+    emb = FakeEmbedder(AXES)
+    keep = add(world, "blog", "Agent post", "agent")
+    old = add(world, "arxiv", "Old paper", "rerank", arxiv_id="9", item_type="paper")
+    cluster.embed_new(world, emb)  # the old flow stored vectors for every paper
+    world.execute("UPDATE items SET status = 'dropped' WHERE id = ?", (old,))
+    assert cluster.purge_dropped_papers(world) == 1
+    stored = {r[0] for r in world.execute("SELECT item_id FROM item_embeddings")}
+    assert stored == {keep}
+    # The rebuilt table still answers nearest-neighbor queries.
+    vec = emb.encode(["agent"])[0].tobytes()
+    hit = world.execute(
+        "SELECT item_id FROM item_embeddings WHERE embedding MATCH ? AND k = 1", (vec,)
+    ).fetchone()
+    assert hit[0] == keep

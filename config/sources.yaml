@@ -105,7 +105,7 @@ sources:
     link_pattern: "^/the-batch/issue-[0-9]+/?$"
     item_type: news
     tier: 2
-    enabled: true
+    enabled: false      # 403 from GitHub Actions runners (works locally), checked 2026-10-29
   - id: import_ai
     name: Import AI (Jack Clark)
     kind: rss           # mirror: https://importai.substack.com/feed

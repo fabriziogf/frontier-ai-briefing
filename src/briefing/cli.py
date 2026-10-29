@@ -103,7 +103,6 @@ def rank() -> None:
             check_llm, load_prompt("same_event"), settings["models"]["fast"], rank_cfg.get("effort")
         )
         embedder = SentenceTransformerEmbedder(emb_cfg["model"], emb_cfg["dims"])
-        embedded = cluster.embed_new(conn, embedder)
         pre = cluster.prefilter_papers(
             conn,
             embedder,
@@ -112,6 +111,8 @@ def rank() -> None:
             arxiv_cfg["theme_similarity_threshold"],
             arxiv_cfg["max_papers_per_day"],
         )
+        purged = cluster.purge_dropped_papers(conn)
+        embedded = cluster.embed_new(conn, embedder)
         clu = cluster.cluster_new(
             conn,
             clus_cfg["same_event_threshold"],
@@ -122,7 +123,10 @@ def rank() -> None:
         stats.items_in, stats.items_out = clu["clustered"], clu["new_clusters"]
         stats.tokens_in, stats.tokens_out = check_llm.tokens_in, check_llm.tokens_out
         stats.cost_usd = check_llm.cost_usd
-    typer.echo(f"embedded {embedded} · papers {json.dumps(pre)} · clusters {json.dumps(clu)}")
+    typer.echo(
+        f"embedded {embedded} · papers {json.dumps(pre)} · purged {purged} dropped papers"
+        f" · clusters {json.dumps(clu)}"
+    )
 
     budget_left = settings["budget_usd"]["daily"] - db.spend_since(
         conn, _local_midnight_iso(settings)
@@ -142,6 +146,7 @@ def rank() -> None:
             stats.error = "budget_exceeded"
         elif result["failed"]:
             stats.error = "; ".join(result["failed"])[:1000]
+    db.compact(conn)
     typer.echo(
         f"ranked {result['ranked']}/{result['clusters']} clusters · "
         f"{llm.tokens_in} in / {llm.tokens_out} out tokens · ${llm.cost_usd:.4f}"

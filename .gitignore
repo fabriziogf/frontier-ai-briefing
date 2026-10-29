@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data: never commit. The DB holds feedback and the feed token path.
+/data/
+/output/
+*.db
+*.db-journal
+*.sqlite
+http_cache.sqlite
+*.mp3
+*.wav
+
+# Eval runs (labeled sets in evals/data/ are tracked)
+evals/runs/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,1 @@
+"""Frontier AI briefing pipeline."""

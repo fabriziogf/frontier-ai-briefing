@@ -1,0 +1,71 @@
+# Pipeline settings. Defaults come from the spec; tune against evals/, not by feel.
+
+models:
+  fast: claude-haiku-5-5      # classification, ranking, short notes
+  strong: claude-sonnet-5-5   # paper explanations, weekly synthesis, audio script
+
+embeddings:
+  model: BAAI/bge-small-en-v1.5
+  dims: 384
+
+storage:
+  db_path: data/briefing.db
+  output_dir: output
+  http_cache_ttl_hours: 6
+
+ingest:
+  user_agent: "frontier-ai-briefing/0.1 (personal research feed reader)"
+  raw_text_max_chars: 20000
+  arxiv:
+    theme_similarity_threshold: 0.45
+    max_papers_per_day: 40
+
+clustering:
+  window_days: 7
+  same_event_threshold: 0.85
+  borderline_low: 0.75     # 0.75 to 0.85 goes to an LLM yes/no check
+
+ranking:
+  weights:
+    theme: 0.55
+    significance: 0.30
+    source_tier: 0.10
+    feedback_affinity: 0.05
+  tier_bonus: {1: 1.0, 2: 0.6, 3: 0.3}
+  thresholds:
+    daily: 0.60
+    explain: 0.65
+  weekly:
+    min_items: 8
+    max_items: 12
+    max_per_theme: 4
+
+explain:
+  daily_cap: 3
+  max_revisions: 1
+  familiar_after_appearances: 4
+  calibration_window: 10
+
+audio:
+  target_minutes: [15, 20]
+  words_per_minute: 150
+  segment_gap_ms: 600
+  loudness_lufs: -16
+  bitrate: 128k
+  tts_provider: openai       # DECISION: openai | elevenlabs | kokoro (local)
+  voice: ""
+
+feedback:
+  affinity_window_days: 60
+
+delivery:
+  email_provider: none       # DECISION: resend | smtp | none (markdown only)
+
+schedule:
+  timezone: America/New_York
+  daily_run: "06:30"
+  weekly_run: "Sat 06:00"
+
+budget_usd:
+  daily: 3.0
+  weekly: 10.0

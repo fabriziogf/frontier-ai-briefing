@@ -1,0 +1,1 @@
+"""Daily and weekly digests."""

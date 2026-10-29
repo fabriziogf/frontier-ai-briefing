@@ -1,0 +1,24 @@
+name: weekly
+
+# weekly briefing -> audio -> publish (spec section 11)
+# Manual only until M4/M5 land. Then enable the cron (Saturday 10:00 UTC, about 6:00 New York).
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 10 * * 6"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TTS_API_KEY: ${{ secrets.TTS_API_KEY }}
+      PODCAST_PATH_TOKEN: ${{ secrets.PODCAST_PATH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: uv sync --locked
+      # TODO(M4): restore the DB from private storage before, and save it after.
+      - run: uv run briefing weekly
+      - run: uv run briefing audio

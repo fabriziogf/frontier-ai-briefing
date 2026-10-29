@@ -1,0 +1,124 @@
+# Seed sources (spec section 5.1).
+# URLs checked on 2026-10-28: each returned HTTP 200. That only means the URL is up.
+# Enable a source once its fetcher actually parses items from it.
+# tier: 1 = primary lab/official, 2 = strong secondary, 3 = aggregator
+
+sources:
+  # Tier 1
+  - id: anthropic
+    name: Anthropic news
+    kind: html          # no official feed found
+    url: https://www.anthropic.com/news
+    tier: 1
+    enabled: false
+  - id: openai
+    name: OpenAI blog
+    kind: rss
+    url: https://openai.com/news/rss.xml
+    tier: 1
+    enabled: false
+  - id: deepmind
+    name: Google DeepMind blog
+    kind: rss
+    url: https://deepmind.google/blog/rss.xml
+    tier: 1
+    enabled: false
+  - id: google_research
+    name: Google Research blog
+    kind: rss
+    url: https://research.google/blog/rss/
+    tier: 1
+    enabled: false
+  - id: meta_ai
+    name: Meta AI blog
+    kind: html
+    url: https://ai.meta.com/blog/
+    tier: 1
+    enabled: false
+  - id: mistral
+    name: Mistral news
+    kind: html
+    url: https://mistral.ai/news
+    tier: 1
+    enabled: false
+  - id: hf_blog
+    name: Hugging Face blog
+    kind: rss
+    url: https://huggingface.co/blog/feed.xml
+    tier: 1
+    enabled: false
+  - id: arxiv
+    name: arXiv (cs.CL, cs.IR, cs.AI, cs.LG)
+    kind: arxiv
+    url: http://export.arxiv.org/api/query
+    categories: [cs.CL, cs.IR, cs.AI, cs.LG]
+    tier: 1
+    enabled: false
+  - id: hf_daily_papers
+    name: Hugging Face Daily Papers
+    kind: hf_papers
+    url: https://huggingface.co/api/daily_papers
+    tier: 1
+    enabled: false
+
+  # Tier 2
+  - id: simon_willison
+    name: Simon Willison's weblog
+    kind: rss
+    url: https://simonwillison.net/atom/everything/
+    tier: 2
+    enabled: false
+  - id: interconnects
+    name: Interconnects (Nathan Lambert)
+    kind: rss
+    url: https://www.interconnects.ai/feed
+    tier: 2
+    enabled: false
+  - id: latent_space
+    name: Latent Space
+    kind: rss
+    url: https://www.latent.space/feed
+    tier: 2
+    enabled: false
+  - id: the_batch
+    name: The Batch (DeepLearning.AI)
+    kind: html          # /the-batch/feed/ returned 404; listing page is up
+    url: https://www.deeplearning.ai/the-batch/
+    tier: 2
+    enabled: false
+  - id: import_ai
+    name: Import AI (Jack Clark)
+    kind: rss           # mirror: https://importai.substack.com/feed
+    url: https://jack-clark.net/feed/
+    tier: 2
+    enabled: false
+  - id: lilian_weng
+    name: Lilian Weng's blog
+    kind: rss
+    url: https://lilianweng.github.io/index.xml
+    tier: 2
+    enabled: false
+  - id: eugene_yan
+    name: Eugene Yan
+    kind: rss
+    url: https://eugeneyan.com/rss/
+    tier: 2
+    enabled: false
+
+  # Tier 3
+  - id: hacker_news
+    name: Hacker News front page (AI-filtered)
+    kind: hn
+    url: https://hn.algolia.com/api/v1/search?tags=front_page
+    tier: 3
+    enabled: false
+  - id: github_trending
+    name: GitHub trending (Python, AI topics)
+    kind: github
+    url: https://github.com/trending/python
+    tier: 3
+    enabled: false
+
+# arXiv pre-filter: papers from these labs/authors always reach ranking.
+watched_authors: []
+watched_labs: []

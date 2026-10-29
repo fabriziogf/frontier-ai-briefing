@@ -1,0 +1,51 @@
+# Relevance profile (spec section 5.4). Public themes only: this repo is public.
+
+owner_context: >
+  PM working on consumer search and discovery for a large audio streaming platform.
+  Areas: search quality and relevance, AI-generated search overviews/answers,
+  trust and safety of AI outputs, agentic platforms and tooling.
+  Strong applied ML background; not a math/stats specialist.
+
+themes:
+  - id: search_quality
+    name: Search & retrieval quality
+    description: >
+      Ranking, retrieval (dense/sparse/hybrid), query understanding, reranking,
+      relevance evaluation, RAG retrieval components, recommendation-search overlap.
+    weight: 1.0
+  - id: ai_overviews
+    name: AI-generated answers & overviews
+    description: >
+      Generative search, answer engines, summarization grounded in sources,
+      citation/attribution, answer UX, hallucination in summaries.
+    weight: 1.0
+  - id: trust_safety
+    name: Trust, grounding & evaluation of AI outputs
+    description: >
+      Factuality, grounding, calibration, LLM-as-judge, eval methodology,
+      red-teaming, content policy, interpretability with product implications.
+    weight: 0.9
+  - id: agentic_platforms
+    name: Agentic systems & platforms
+    description: >
+      Agent architectures, tool use, MCP and protocols, orchestration frameworks,
+      agent evaluation, memory, multi-agent systems, developer platforms.
+    weight: 0.9
+  - id: audio_media
+    name: Audio, voice & media AI
+    description: >
+      Speech models, TTS, voice agents, music/audio generation and understanding,
+      podcast/audio search, multimodal models handling audio.
+    weight: 0.7
+  - id: frontier_models
+    name: Frontier model releases & capabilities
+    description: >
+      Major model launches, capability jumps, pricing changes, context length,
+      reasoning/test-time compute, open-weight releases.
+    weight: 0.6
+
+exclude_topics:
+  - Pure theory with no near-term product implication
+  - Crypto/web3 AI
+  - Funding rounds without product or research substance
+  - Robotics hardware (unless agentic software is central)

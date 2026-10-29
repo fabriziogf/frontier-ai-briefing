@@ -58,6 +58,7 @@ audio:
   save_to_spotify:
     cli_version: 0.2.0       # beta: pin it, bump deliberately
     show_title: Frontier AI Briefing   # looked up by title; the show ID stays out of the repo
+    cover_image: assets/cover.jpg      # .jpg/.png, max 1 MB; source is assets/cover.svg
     status_timeout: 5m
 
 feedback:

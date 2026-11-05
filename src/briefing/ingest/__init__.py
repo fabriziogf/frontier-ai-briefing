@@ -37,6 +37,13 @@ def run_ingest(
     """Fetch every enabled source. A failed source is reported, never fatal."""
     ingest_cfg = settings["ingest"]
     db.sync_sources(conn, sources_cfg["sources"])
+    # With no weekend runs, Monday reaches back to Friday's run, not just lookback_days.
+    now = datetime.now(UTC)
+    prev = conn.execute("SELECT MAX(started_at) AS t FROM runs WHERE stage = 'ingest'").fetchone()
+    catchup = now
+    if prev["t"]:
+        floor = now - timedelta(days=ingest_cfg["catchup_max_days"])
+        catchup = max(floor, datetime.fromisoformat(prev["t"]))
     report: dict[str, Any] = {}
     with db.track_run(conn, "ingest") as stats:
         for source in sources_cfg["sources"]:
@@ -48,7 +55,7 @@ def run_ingest(
                 ai_keywords=sources_cfg.get("ai_keywords"),
             )
             lookback = source.get("lookback_days", ingest_cfg["lookback_days"])
-            since = datetime.now(UTC) - timedelta(days=lookback)
+            since = min(now - timedelta(days=lookback), catchup)
             first_run = not db.has_items(conn, source["id"])
             try:
                 items = fetcher.fetch(source, since, known=db.known_urls(conn, source["id"]))

@@ -21,6 +21,7 @@ ingest:
   user_agent: "frontier-ai-briefing/0.1 (personal research feed reader)"
   raw_text_max_chars: 20000
   lookback_days: 2           # per-source override: lookback_days in sources.yaml
+  catchup_max_days: 4        # reach back to the previous ingest run (no weekend runs), at most this far
   min_request_interval_s: 1.0
   host_intervals_s:
     export.arxiv.org: 3.0    # arXiv API terms: one request every 3 seconds
@@ -57,6 +58,7 @@ ranking:
     max_per_theme: 4
 
 digest:
+  min_items: 5              # below this, fill with the next highest scored, marked as below the bar
   max_items: 15
   max_age_days: 7            # skip items published longer ago than this
 

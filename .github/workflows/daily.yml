@@ -3,11 +3,12 @@ name: daily
 # ingest -> cluster -> rank -> daily digest (spec section 11)
 # State lives in the private repo fabriziogf/frontier-ai-briefing-data: briefing.db plus
 # daily/<date>.md. GitHub cron is UTC only: 11:30 UTC is 6:30 New York in winter (EST) and
-# 7:30 in summer (EDT).
+# 7:30 in summer (EDT). Weekdays only: weekend volume is too low for a digest, and Monday's
+# ingest reaches back to Friday's run.
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 11 * * *"
+    - cron: "30 11 * * 1-5"
 
 concurrency:
   group: daily

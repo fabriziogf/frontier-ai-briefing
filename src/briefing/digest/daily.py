@@ -19,9 +19,18 @@ def _primary_theme(scores: dict[str, float], weights: dict[str, float]) -> str:
 
 
 def select_clusters(
-    conn: sqlite3.Connection, digest_id: str, threshold: float, max_items: int, max_age_days: int
-) -> tuple[list[sqlite3.Row], str]:
-    """Clusters ranked since the previous daily digest and never sent before."""
+    conn: sqlite3.Connection,
+    digest_id: str,
+    threshold: float,
+    min_items: int,
+    max_items: int,
+    max_age_days: int,
+) -> tuple[list[sqlite3.Row], list[sqlite3.Row], str]:
+    """Clusters ranked since the previous daily digest and never sent before.
+
+    Returns (above threshold, below-threshold fill, window start). When fewer than min_items
+    clear the threshold, the next highest scored clusters fill the digest up to min_items.
+    """
     prev = conn.execute(
         """SELECT created_at FROM digests WHERE kind = 'daily' AND id != ?
            ORDER BY created_at DESC LIMIT 1""",
@@ -41,12 +50,16 @@ def select_clusters(
            JOIN clusters c ON c.id = r.cluster_id
            JOIN items i ON i.id = c.canonical_item
            JOIN sources s ON s.id = i.source_id
-           WHERE r.ranked_at >= ? AND r.relevance >= ?
-             AND COALESCE(i.published_at, i.fetched_at) >= ?
+           WHERE r.ranked_at >= ? AND COALESCE(i.published_at, i.fetched_at) >= ?
            ORDER BY r.relevance DESC""",
-        (window_start, threshold, oldest),
+        (window_start, oldest),
     ).fetchall()
-    return [r for r in rows if r["cluster_id"] not in sent][:max_items], window_start
+    rows = [r for r in rows if r["cluster_id"] not in sent]
+    above = [r for r in rows if r["relevance"] >= threshold][:max_items]
+    # Excluded topics score exactly 0 (rank.blend); the tier term keeps every other item above it.
+    below = [r for r in rows if 0 < r["relevance"] < threshold]
+    below = below[: max(0, min_items - len(above))]
+    return above, below, window_start
 
 
 def scan_counts(conn: sqlite3.Connection, window_start: str) -> tuple[int, int]:
@@ -69,11 +82,20 @@ def render(
     scanned: int,
     dups: int,
     notes: list[str],
+    below: list[sqlite3.Row] | None = None,
 ) -> str:
     weights = {t["id"]: t["weight"] for t in profile["themes"]}
     groups: dict[str, list[sqlite3.Row]] = {}
     for r in rows:
         groups.setdefault(_primary_theme(json.loads(r["theme_scores"]), weights), []).append(r)
+
+    def entry(r: sqlite3.Row) -> list[str]:
+        return [
+            f"**[{r['title']}]({r['url']})**: {r['source_name']} · {r['item_type']}  ",
+            f"Why it matters: {r['why_it_matters']}",
+            "",
+        ]
+
     lines = [f"# AI Briefing: {day:%a %b} {day.day}", ""]
     if not rows:
         lines += ["Nothing cleared the bar today.", ""]
@@ -83,9 +105,11 @@ def render(
             continue
         lines += [f"## {theme['name']}", ""]
         for r in items:
-            lines.append(f"**[{r['title']}]({r['url']})**: {r['source_name']} · {r['item_type']}  ")
-            lines.append(f"Why it matters: {r['why_it_matters']}")
-            lines.append("")
+            lines += entry(r)
+    if below:
+        lines += ["## Below the usual bar", "", "The next highest scored items today.", ""]
+        for r in below:
+            lines += entry(r)
     footer = f"{dups} items dropped as duplicates · {scanned} items scanned"
     lines += ["---", footer]
     lines += notes
@@ -103,22 +127,24 @@ def write_daily(
     day = datetime.now(tz)
     digest_id = f"daily-{day:%Y-%m-%d}"
     cfg = settings["digest"]
-    rows, window_start = select_clusters(
+    rows, below, window_start = select_clusters(
         conn,
         digest_id,
         settings["ranking"]["thresholds"]["daily"],
+        cfg["min_items"],
         cfg["max_items"],
         cfg["max_age_days"],
     )
     scanned, dups = scan_counts(conn, window_start)
-    markdown = render(rows, profile, day, scanned, dups, notes or [])
+    markdown = render(rows, profile, day, scanned, dups, notes or [], below)
+    cluster_ids = [r["cluster_id"] for r in rows + below]
     conn.execute(
         """INSERT OR REPLACE INTO digests (id, kind, markdown, cluster_ids, created_at)
            VALUES (?, 'daily', ?, ?, ?)""",
-        (digest_id, markdown, json.dumps([r["cluster_id"] for r in rows]), now_iso()),
+        (digest_id, markdown, json.dumps(cluster_ids), now_iso()),
     )
     conn.commit()
     path = output_dir / "daily" / f"{day:%Y-%m-%d}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(markdown)
-    return path, len(rows)
+    return path, len(cluster_ids)

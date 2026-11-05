@@ -87,3 +87,19 @@ def test_spend_since_sums_run_costs(conn):
     with db.track_run(conn, "rank") as s:
         s.cost_usd = 0.5
     assert db.spend_since(conn, "2000-01-01") == 0.75
+
+
+def test_ingest_reaches_back_to_previous_run(conn, settings, sources):
+    """Monday's run (no weekend runs) picks up Friday evening and Saturday posts."""
+    now = datetime.now(UTC)
+    feed = rss(
+        ("Saturday", "https://blog.test/sat", now - timedelta(days=2, hours=12)),
+        ("Too old", "https://blog.test/old", now - timedelta(days=6)),
+    )
+    cfg = {"sources": sources(("blog", "rss", 2))}
+    cfg["sources"][0]["url"] = "https://blog.test/feed"
+    friday = (now - timedelta(days=3)).isoformat(timespec="seconds")
+    conn.execute("INSERT INTO runs (stage, started_at) VALUES ('ingest', ?)", (friday,))
+
+    report = run_ingest(conn, FakeHttp({"https://blog.test/feed": feed}), cfg, settings)
+    assert report["blog"] == {"fetched": 1, "new": 1}

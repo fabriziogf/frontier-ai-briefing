@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -151,15 +152,54 @@ def test_rank_then_daily_digest(world, profile, settings, tmp_path):
 
     path, n = write_daily(world, profile, settings, tmp_path)
     md = path.read_text()
-    assert n == 2
+    assert n == 2  # under min_items, but the excluded item never fills the floor
     assert md.index("## Search & retrieval quality") < md.index("## Agentic systems & platforms")
     assert "Funding round" not in md
     assert "Why it matters: Cuts latency." in md
 
     # A second digest the same day rebuilds it; a new day would not repeat these clusters.
     world.execute("UPDATE digests SET id = 'daily-2000-01-01', created_at = '2000-01-01'")
-    rows, _ = select_clusters(world, "daily-next", 0.6, 15, 7)
-    assert rows == []
+    rows, below, _ = select_clusters(world, "daily-next", 0.6, 5, 15, 7)
+    assert rows == [] and below == []
+
+
+def ranked_world(world, n, relevance):
+    """n ranked clusters with the given relevance scores, highest first."""
+    for k in range(n):
+        add(world, "blog", f"Item {k}", f"text {k}")
+    for k, r in enumerate(relevance):
+        cid = f"c{k}"
+        iid = world.execute("SELECT id FROM items WHERE title = ?", (f"Item {k}",)).fetchone()[0]
+        world.execute(
+            "INSERT INTO clusters (id, canonical_item, created_at) VALUES (?, ?, ?)",
+            (cid, iid, db.now_iso()),
+        )
+        world.execute(
+            """INSERT INTO rankings (cluster_id, theme_scores, significance, relevance, rationale,
+                 why_it_matters, ranked_at, model, prompt_version)
+               VALUES (?, ?, 0.5, ?, 'r', 'w', ?, 'm', 'p@1')""",
+            (cid, json.dumps(scores(search_quality=0.9)), r, db.now_iso()),
+        )
+    world.commit()
+
+
+def test_floor_fills_to_min_items_below_threshold(world, profile, settings, tmp_path):
+    ranked_world(world, 8, [0.7, 0.62, 0.55, 0.0, 0.5, 0.45, 0.4, 0.3])
+    rows, below, _ = select_clusters(world, "daily-x", 0.6, 5, 15, 7)
+    assert [r["relevance"] for r in rows] == [0.7, 0.62]
+    assert [r["relevance"] for r in below] == [0.55, 0.5, 0.45]
+
+    path, n = write_daily(world, profile, settings, tmp_path)
+    md = path.read_text()
+    assert n == 5
+    assert md.index("## Search & retrieval quality") < md.index("## Below the usual bar")
+    assert md.index("Item 1") < md.index("## Below the usual bar") < md.index("Item 2")
+
+
+def test_floor_adds_nothing_when_enough_clear_the_bar(world):
+    ranked_world(world, 6, [0.9, 0.8, 0.75, 0.7, 0.65, 0.3])
+    rows, below, _ = select_clusters(world, "daily-x", 0.6, 5, 15, 7)
+    assert len(rows) == 5 and below == []
 
 
 def test_rank_stops_at_budget(world, profile, settings):

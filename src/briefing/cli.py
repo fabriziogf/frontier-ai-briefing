@@ -3,6 +3,7 @@
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -196,16 +197,150 @@ def run_daily() -> None:
     daily()
 
 
+def _evals():
+    """evals/ sits at the repo root, outside the installed package."""
+    import sys
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from evals import relevance
+
+    return relevance
+
+
+DbOption = Annotated[
+    Path | None, typer.Option("--db", help="SQLite file to read. Default: storage.db_path.")
+]
+
+
+def _read_conn(settings: dict, path: Path | None):
+    path = path or ROOT / settings["storage"]["db_path"]
+    if not path.exists():
+        typer.echo(f"No database at {path}.")
+        raise typer.Exit(code=1)
+    return db.connect(path)
+
+
 @app.command()
-def label() -> None:
-    """Label items for the relevance eval."""
-    _not_yet("M2")
+def label(db_path: DbOption = None) -> None:
+    """Label ranked clusters must_see / nice / skip for the relevance eval. Resumable."""
+    import sys
+    import textwrap
+
+    import click
+
+    relevance = _evals()
+    settings = _settings()
+    cfg = settings["evals"]["relevance"]
+    labels_path = ROOT / cfg["labels_path"]
+    clusters = relevance.ranked_clusters(
+        _read_conn(settings, db_path), load_yaml("profile.yaml"), settings
+    )
+    labeled = set(relevance.load_labels(labels_path))
+    queue = relevance.sample_for_labeling(
+        clusters, labeled, cfg["target_labels"], cfg["top_k"], cfg["strata"], cfg["seed"]
+    )
+    if not queue:
+        typer.echo(f"Nothing to label: {len(labeled)} labels, target {cfg['target_labels']}.")
+        return
+    typer.echo(
+        f"{len(labeled)} labeled, {len(queue)} to go. Scores are hidden on purpose.\n"
+        "Keys: m must_see · n nice · s skip · d decide later · u undo · q quit\n"
+    )
+    keys = {"m": "must_see", "n": "nice", "s": "skip"}
+    # Single keypress in a terminal; piped keys otherwise, ending at EOF.
+    getkey = click.getchar if sys.stdin.isatty() else lambda: sys.stdin.read(1) or "q"
+    done: list[int] = []  # queue positions labeled this session, for undo
+    i = 0
+    while i < len(queue):
+        c = queue[i]
+        published = (c["published_at"] or "")[:10] or "undated"
+        excerpt = " ".join((c["raw_text"] or "").split())[:500]
+        typer.echo(f"[{len(labeled) + len(done) + 1}/{cfg['target_labels']}] {c['title']}")
+        typer.echo(f"  {c['source_name']} · {c['item_type']} · {published}")
+        typer.echo(f"  {c['url']}")
+        if excerpt:
+            typer.echo(textwrap.indent(textwrap.fill(excerpt, 96), "  "))
+        while True:
+            key = getkey().lower()
+            if key in keys or key in ("d", "u", "q"):
+                break
+        if key == "q":
+            break
+        if key == "u":
+            if done:
+                relevance.undo_last(labels_path)
+                i = done.pop()
+                typer.echo("  undone, back to the last labeled item\n")
+            continue
+        if key == "d":
+            typer.echo("  later\n")
+        else:
+            relevance.append_label(labels_path, c, keys[key])
+            done.append(i)
+            typer.echo(f"  {keys[key]}\n")
+        i += 1
+    typer.echo(f"Saved {len(done)} labels to {cfg['labels_path']}.")
 
 
 @app.command("eval")
-def run_eval() -> None:
-    """Run the eval suites."""
-    _not_yet("M2")
+def run_eval(db_path: DbOption = None) -> None:
+    """Relevance eval on the owner labels: precision@10, must_see recall, nDCG."""
+    relevance = _evals()
+    settings = _settings()
+    profile = load_yaml("profile.yaml")
+    cfg = settings["evals"]["relevance"]
+    labels = relevance.load_labels(ROOT / cfg["labels_path"])
+    if not labels:
+        typer.echo(f"No labels in {cfg['labels_path']}. Run `briefing label` first.")
+        raise typer.Exit(code=1)
+    clusters = relevance.ranked_clusters(_read_conn(settings, db_path), profile, settings)
+    threshold = settings["ranking"]["thresholds"]["daily"]
+    m = relevance.evaluate(clusters, labels, threshold, cfg["top_k"])
+    result = {
+        "metrics": m,
+        "config": relevance.config_snapshot(profile, settings, clusters),
+        "labels_file_count": len(labels),
+    }
+    path, prev = relevance.save_run(ROOT / cfg["runs_dir"], result)
+    pm = prev["metrics"] if prev else {}
+
+    def line(name: str, key: str, target: float | None = None) -> str:
+        v = m[key]
+        s = f"{name:28} " + ("n/a" if v is None else f"{v:.3f}")
+        if v is not None and pm.get(key) is not None:
+            s += f"  ({v - pm[key]:+.3f})"
+        if target is not None and v is not None:
+            s += "  pass" if v >= target else f"  below {target}"
+        return s
+
+    unmatched = len(labels) - m["labeled"]
+    typer.echo(
+        f"{m['labeled']} labeled clusters "
+        + " · ".join(f"{k} {n}" for k, n in m["counts"].items())
+        + (f" · {unmatched} labels not in this DB" if unmatched else "")
+    )
+    typer.echo(
+        line(
+            f"precision@{cfg['top_k']} (mean by week)",
+            "precision_at_k",
+            cfg["targets"]["precision_at_k"],
+        )
+    )
+    for week, w in m["precision_at_k_by_week"].items():
+        p = "n/a" if w["precision"] is None else f"{w['precision']:.2f}"
+        typer.echo(f"  {week}: {p} ({w['labeled']}/{w['of']} labeled)")
+    typer.echo(
+        line(f"must_see recall @ {threshold}", "must_see_recall", cfg["targets"]["must_see_recall"])
+    )
+    typer.echo(
+        line(f"precision above {threshold}", "precision_above_threshold")
+        + f"  ({m['above_threshold']} clusters)"
+    )
+    typer.echo(line("nDCG (all labeled)", "ndcg"))
+    for miss in m["missed_must_see"]:
+        typer.echo(f"  missed must_see {miss['relevance']:.2f}: {miss['title'][:80]}")
+    typer.echo(f"-> {path.relative_to(ROOT)}")
 
 
 @app.command()

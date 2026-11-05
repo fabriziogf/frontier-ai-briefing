@@ -62,6 +62,16 @@ digest:
   max_items: 15
   max_age_days: 7            # skip items published longer ago than this
 
+evals:
+  relevance:
+    labels_path: evals/data/relevance_labels.jsonl
+    runs_dir: evals/runs
+    target_labels: 150
+    top_k: 10                # precision@k per ISO week, a stand-in for the weekly selection (M4)
+    strata: 5                # equal-size relevance bands sampled evenly, so recall sees misses
+    seed: 7
+    targets: {precision_at_k: 0.7, must_see_recall: 0.8}   # M2 acceptance
+
 explain:
   daily_cap: 3
   max_revisions: 1
